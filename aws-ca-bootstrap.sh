@@ -11,33 +11,11 @@ CA_URL="https://ec2-3-85-126-215.compute-1.amazonaws.com"
 #   # step certificate fingerprint $(step path)/certs/root_ca.crt
 CA_FINGERPRINT="7036e2293a1eb83d8b91a43c76bc49d5cfb59ec6d6c688b6007006f7effcd052"
 
-case $(arch) in
-x86_64)
-    ARCH="amd64"
-    ;;
-aarch64)
-    ARCH="arm64"
-    ;;
-esac
 
-# Install step
-STEP_VERSION=$(curl -s https://api.github.com/repos/smallstep/cli/releases/latest | jq -r '.tag_name')
-
-arch=$(uname --machine)
-if [[ $arch == aarch64 ]];
-then
-    MACHINE_ARCH="arm64"
-fi
-
-if [[ $arch == x86_64 ]];
-then
-    MACHINE_ARCH="amd64"
-fi
-
-curl -LO https://github.com/smallstep/cli/releases/download/v${STEPCLI_VERSION}/step-cli_${STEPCLI_VERSION}_${MACHINE_ARCH}deb
-dpkg -i step-cli_${STEPCLI_VERSION}_${MACHINE_ARCH}.deb
+wget https://dl.smallstep.com/gh-release/cli/gh-release-header/v0.28.7/step-cli_0.28.7-1_amd64.deb
 
 
+dpkg -i step-cli_0.28.7-1_amd64.deb
 
 
 # Configure `step` to connect to & trust our `step-ca`.
