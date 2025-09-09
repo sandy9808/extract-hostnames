@@ -1,0 +1,94 @@
+#!/bin/bash
+#
+# This script will launch and configure a step-ca SSH Certificate Authority
+# on AWS in an Ubuntu / Debian-based VM with OIDC and AWS provisioners
+#
+# See https://smallstep.com/blog/diy-single-sign-on-for-ssh/ for full instructions
+
+OIDC_CLIENT_ID="662625149539-7a2g5u1qe2etdlhkb1osv7tbe5f7ic4p.apps.googleusercontent.com" # from Google
+OIDC_CLIENT_SECRET="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" # from Google
+ALLOWED_DOMAIN="gmail.com"
+CA_NAME="gmail CA"
+ROOT_KEY_PASSWORD="verystrongpassword"
+EMAIL="sandeepkumar070200@gmail.com"
+
+OPENID_CONFIG_ENDPOINT="https://accounts.google.com/.well-known/openid-configuration"
+
+case $(arch) in
+x86_64)
+    ARCH="amd64"
+    ;;
+aarch64)
+    ARCH="arm64"
+    ;;
+esac
+
+# Install step and step-ca
+curl -sLO https://dl.smallstep.com/cli/docs-cli-install/latest/step-cli_${ARCH}.deb
+dpkg -i step-cli_${ARCH}.deb
+
+curl -sLO https://dl.smallstep.com/certificates/docs-ca-install/latest/step-ca_${ARCH}.deb
+dpkg -i step-ca_${ARCH}.deb
+
+
+# All your CA config and certificates will go into $STEPPATH.
+export STEPPATH=/etc/step-ca
+mkdir -p $STEPPATH
+chmod 700 $STEPPATH
+echo $ROOT_KEY_PASSWORD > $STEPPATH/password.txt
+
+# Add a service to systemd for our CA.
+cat<<EOF > /etc/systemd/system/step-ca.service
+[Unit]
+Description=step-ca service
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+User=root
+Environment=STEPPATH=/etc/step-ca
+ExecStart=/usr/bin/step-ca ${STEPPATH}/config/ca.json --password-file=${STEPPATH}/password.txt
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Get AWS host metadata (IMDSv2)
+AWS_TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+
+LOCAL_HOSTNAME=$(curl -H "X-aws-ec2-metadata-token: $AWS_TOKEN" -s http://169.254.169.254/latest/meta-data/local-hostname)
+LOCAL_IP=$(curl -H "X-aws-ec2-metadata-token: $AWS_TOKEN" -s http://169.254.169.254/latest/meta-data/local-ipv4)
+PUBLIC_HOSTNAME=$(curl -H "X-aws-ec2-metadata-token: $AWS_TOKEN" -s http://169.254.169.254/latest/meta-data/public-hostname)
+PUBLIC_IP=$(curl -H "X-aws-ec2-metadata-token: $AWS_TOKEN" -s http://169.254.169.254/latest/meta-data/public-ipv4)
+AWS_ACCOUNT_ID=$(curl -H "X-aws-ec2-metadata-token: $AWS_TOKEN" -s http://169.254.169.254/latest/dynamic/instance-identity/document | grep accountId | awk '{print $3}' | sed 's/"//g' | sed 's/,//g')
+
+# Set up our basic CA configuration and generate root keys
+step ca init --ssh --name="$CA_NAME" \
+     --dns="$LOCAL_IP,$LOCAL_HOSTNAME,$PUBLIC_IP,$PUBLIC_HOSTNAME" \
+     --address=":443" --provisioner="$EMAIL" \
+     --password-file="$STEPPATH/password.txt"
+
+# Add the Google OAuth provisioner, for user certificates
+step ca provisioner add Google --type=oidc --ssh \
+    --client-id="$OIDC_CLIENT_ID" \
+    --client-secret="$OIDC_CLIENT_SECRET" \
+    --configuration-endpoint="$OPENID_CONFIG_ENDPOINT" \
+    --domain="$ALLOWED_DOMAIN"
+
+# Add the AWS provisioner, for host bootstrapping
+step ca provisioner add "Amazon Web Services" --type=AWS --ssh \
+    --aws-account=$AWS_ACCOUNT_ID
+
+# The sshpop provisioner lets hosts renew their ssh certificates
+step ca provisioner add SSHPOP --type=sshpop --ssh
+
+# Use Google (OIDC) as the default provisioner in the end user's
+# ssh configuration template.
+sed -i 's/\%p$/%p --provisioner="Google"/g' /etc/step-ca/templates/ssh/config.tpl
+
+service step-ca start
+
+echo "export STEPPATH=$STEPPATH" >> /root/.profile
