@@ -23,8 +23,22 @@ esac
 # Install step
 STEP_VERSION=$(curl -s https://api.github.com/repos/smallstep/cli/releases/latest | jq -r '.tag_name')
 
-curl -sLO https://github.com/smallstep/cli/releases/download/${STEP_VERSION}/step-cli_${STEP_VERSION:1}_${ARCH}.deb
-dpkg -i step-cli_${STEP_VERSION:1}_${ARCH}.deb
+arch=$(uname --machine)
+if [[ $arch == aarch64 ]];
+then
+    MACHINE_ARCH="arm64"
+fi
+
+if [[ $arch == x86_64 ]];
+then
+    MACHINE_ARCH="amd64"
+fi
+
+curl -LO https://github.com/smallstep/cli/releases/download/v${STEPCLI_VERSION}/step-cli_${STEPCLI_VERSION}_${MACHINE_ARCH}deb
+dpkg -i step-cli_${STEPCLI_VERSION}_${MACHINE_ARCH}.deb
+
+
+
 
 # Configure `step` to connect to & trust our `step-ca`.
 # Pull down the CA's root certificate so we can talk to it later with TLS
