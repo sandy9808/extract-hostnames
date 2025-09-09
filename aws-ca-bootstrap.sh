@@ -5,11 +5,11 @@
 # 
 # See https://smallstep.com/blog/diy-single-sign-on-for-ssh/ for full instructions
 
-CA_URL="https://ec2-35-175-175-251.compute-1.amazonaws.com"
+CA_URL="https://ec2-3-85-126-215.compute-1.amazonaws.com"
 
 # Obtain your CA fingerprint by running this on your CA:
 #   # step certificate fingerprint $(step path)/certs/root_ca.crt
-CA_FINGERPRINT="b3f190faa998fc479437c0fd5d0c8e9d6b99541e0792c82e12cd89dda8fc8e63"
+CA_FINGERPRINT="7036e2293a1eb83d8b91a43c76bc49d5cfb59ec6d6c688b6007006f7effcd052"
 
 case $(arch) in
 x86_64)
